@@ -1,10 +1,36 @@
 const oracledb = require('oracledb');
 
+// Ruta al directorio principal del Instant Client
+try {
+    oracledb.initOracleClient();
+    console.log("OCI Instant Client inicializado en modo Thick.");
+} catch (err) {
+    console.error("Error al inicializar Instant Client:", err);
+    // Si falla, la aplicación no podrá usar SODA ni el TNS alias.
+}
+
 oracledb.outFormat = oracledb.OBJECT;
 oracledb.fetchAsString = [oracledb.CLOB];
 oracledb.autoCommit = true;
 
 const CLIENTES_COLLECTION = 'clientes';
+
+//Función auxiliar para OSON/JSON (Centralizada y limpia)
+function readSodaContent(doc) {
+    try {
+        // 1. Intenta leer como JSON textual (colección en JSON o JSON CLOB)
+        return doc.getContent();
+    } catch (err) {
+        // 2. Si falla con ORA-40761 (OSON binario), usar Buffer
+        if (err.errorNum === 40761) {
+            // Usar el método específico para contenido binario
+            const buf = doc.getContentAsBuffer();
+            // Convertir Buffer a string (UTF8) y luego a objeto JS
+            return JSON.parse(buf.toString());
+        }
+        throw err; // cualquier otro error debe salir
+    }
+}
 
 module.exports = class ClienteService {
     constructor() { }
@@ -30,21 +56,26 @@ module.exports = class ClienteService {
     }
 
     async getAll() {
-        let connection;
+        let connection, clientes;
         const result = [];
 
         try {
             connection = await oracledb.getConnection();
-
             const soda = connection.getSodaDatabase();
-            const clienteCollection = await soda.createCollection(CLIENTES_COLLECTION);
-            let clientes = await clienteCollection.find().getDocuments();
-            clientes.forEach((element) => {
+
+            // Usar getCollection() para acceder a la colección existente
+            const clientesCollection = await soda.openCollection(CLIENTES_COLLECTION);
+            // Obtener todos los documentos (SIN PARÁMETROS, para evitar NJS-009)
+            clientes = await clientesCollection.find().getDocuments();
+
+            clientes.forEach(element => {
+                const content=readSodaContent(element);
+                
                 result.push({
                     id: element.key,
                     createdOn: element.createdOn,
                     lastModified: element.lastModified,
-                    ...element.getContent(),
+                    ...content
                 });
             });
         } catch (err) {
@@ -69,13 +100,16 @@ module.exports = class ClienteService {
             connection = await oracledb.getConnection();
 
             const soda = connection.getSodaDatabase();
-            const clientesCollection = await soda.createCollection(CLIENTES_COLLECTION);
+            const clientesCollection = await soda.openCollection(CLIENTES_COLLECTION);
+
             cliente = await clientesCollection.find().key(clienteId).getOne();
+            const content=readSodaContent(cliente);
+
             result = {
                 id: cliente.key,
                 createdOn: cliente.createdOn,
                 lastModified: cliente.lastModified,
-                ...cliente.getContent(),
+                ...content,
             };
 
         } catch (err) {
@@ -100,7 +134,7 @@ module.exports = class ClienteService {
         try {
             connection = await oracledb.getConnection();
             const soda = connection.getSodaDatabase();
-            const clientesCollection = await soda.createCollection(CLIENTES_COLLECTION);
+            const clientesCollection = await soda.openCollection(CLIENTES_COLLECTION);
             /*
                 insertOneAndGet() does not return the doc
                 for performance reasons
@@ -134,7 +168,7 @@ module.exports = class ClienteService {
         try {
             connection = await oracledb.getConnection();
             const soda = connection.getSodaDatabase();
-            const clienteCollection = await soda.createCollection(CLIENTES_COLLECTION);
+            const clienteCollection = await soda.openCollection(CLIENTES_COLLECTION);
             cliente = await clienteCollection.find().key(id).replaceOneAndGet(cliente);
             result = {
                 id: cliente.key,
@@ -165,7 +199,7 @@ module.exports = class ClienteService {
             connection = await oracledb.getConnection();
 
             const soda = connection.getSodaDatabase();
-            const clienteCollection = await soda.createCollection(CLIENTES_COLLECTION);
+            const clienteCollection = await soda.openCollection(CLIENTES_COLLECTION);
             removed = await clienteCollection.find().key(clienteId).remove();
 
         } catch (err) {
