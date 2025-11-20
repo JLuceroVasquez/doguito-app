@@ -42,23 +42,19 @@ module.exports = class ClienteService {
 
         try {
             console.log('Creando pool de conexiones...')
+            // AÑADIDO: OCI_SODA_AS_AL32UTF8
+            // Esto convierte OSON (binario) a JSON (texto) al leer,resolviendo el error de incompatibilidad.
+            oracledb.sodaContentOption = oracledb.OCI_SODA_AS_AL32UTF8;
             await oracledb.createPool({
                 user: process.env.DB_USER,
                 password: process.env.DB_PASSWORD,
                 connectString: process.env.CONNECT_STRING,
-                // ===============================================
-                // AÑADIDO: OCI_SODA_AS_AL32UTF8
-                // Esto convierte OSON (binario) a JSON (texto) al leer,resolviendo el error de incompatibilidad.
-                sodaContentOption: oracledb.OCI_SODA_AS_AL32UTF8,
-                // ===============================================
             });
             console.log('Pool de conexiones creado.')
             return new ClienteService();
         } catch (e) {
             console.log('Error en conexion: ');
             console.log(e);
-            // Es crucial relanzar el error si la inicialización falla
-            throw e;
         }
     }
 
