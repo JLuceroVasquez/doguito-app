@@ -42,13 +42,13 @@ module.exports = class ClienteService {
 
         try {
             console.log('Creando pool de conexiones...')
-            // AÑADIDO: OCI_SODA_AS_AL32UTF8
-            // Esto convierte OSON (binario) a JSON (texto) al leer,resolviendo el error de incompatibilidad.
+            // Global Setting (Se mantiene por si acaso, aunque no funcionó solo)
             oracledb.sodaContentOption = oracledb.OCI_SODA_AS_AL32UTF8;
             await oracledb.createPool({
                 user: process.env.DB_USER,
                 password: process.env.DB_PASSWORD,
                 connectString: process.env.CONNECT_STRING,
+                sodaContentOption: oracledb.OCI_SODA_AS_AL32UTF8, // Setting en Pool
             });
             console.log('Pool de conexiones creado.')
             return new ClienteService();
@@ -64,6 +64,8 @@ module.exports = class ClienteService {
 
         try {
             connection = await oracledb.getConnection();
+            // Forzar la opción SODA en el objeto Connection justo antes de usar SODA, para asegurar que la lectura del formato OSON (binario) sea convertida a JSON (texto).
+            connection.sodaContentOption = oracledb.OCI_SODA_AS_AL32UTF8;
             const soda = connection.getSodaDatabase();
 
             // Usar getCollection() para acceder a la colección existente
@@ -101,7 +103,7 @@ module.exports = class ClienteService {
 
         try {
             connection = await oracledb.getConnection();
-
+            connection.sodaContentOption = oracledb.OCI_SODA_AS_AL32UTF8;
             const soda = connection.getSodaDatabase();
             const clientesCollection = await soda.openCollection(CLIENTES_COLLECTION);
 
